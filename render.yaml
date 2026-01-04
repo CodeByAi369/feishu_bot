@@ -1,0 +1,41 @@
+services:
+  # Web Service
+  - type: web
+    name: feishu-daily-report-bot
+    env: python
+    region: singapore  # 选择离中国近的区域
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.16
+      - key: FEISHU_APP_ID
+        sync: false  # 从 Render Dashboard 手动设置
+      - key: FEISHU_APP_SECRET
+        sync: false
+      - key: FEISHU_VERIFICATION_TOKEN
+        sync: false
+      - key: FEISHU_ENCRYPT_KEY
+        sync: false
+      - key: SMTP_SERVER
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: DAILY_REPORT_ENABLED
+        value: True
+      - key: DAILY_REPORT_CHAT_ID
+        sync: false
+      - key: DAILY_REPORT_RECIPIENTS
+        sync: false
+      - key: DAILY_REPORT_CC
+        sync: false
+
+  # Cron Jobs（定时任务 - 需要付费套餐）
+  # 免费套餐不支持，需要使用外部 cron 服务

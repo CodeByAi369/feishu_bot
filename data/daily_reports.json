@@ -1,0 +1,121 @@
+{
+  "2025-10-21": {
+    "reports": [
+      {
+        "sender": "FrankCheng",
+        "tracking_issues": "TSTAS-396",
+        "work_content": "1. TSTAS-396 完成对打包后的crossShare.app 签名，打包成pkg 签名pkg, 公证pkg 等流程\n2. 串联了从Archive 到app 到pkg 到公证整个流程，目前自测通过\n3. 针对客户对脚本的反馈进行修改 再次提供修改后的脚本\n4. 开始处理TSTAS-427 log 设置为只保留3天内的日志。",
+        "blocks": "无",
+        "next_plan": "TSTAS-427",
+        "timestamp": "2025-10-21 20:01:36",
+        "date": "2025-10-21"
+      },
+      {
+        "sender": "孙康",
+        "tracking_issues": "TSTAS-319",
+        "work_content": "1. 处理JIRA上描述的菜单圆角、阴影、hover状态等UI问题，相关patch和测试包已经上传到JIRA。",
+        "blocks": "无",
+        "next_plan": "1. 处理 TSTAS-425",
+        "timestamp": "2025-10-21 20:02:27",
+        "date": "2025-10-21"
+      },
+      {
+        "sender": "秦意军",
+        "tracking_issues": "TSTAS-360、TSTAS-369",
+        "work_content": "1. 初步完成iOS端的XcliB的重构，完成100%的任务进度\n 2. 调研TSTAS-360的File Log日志符合客户要求，完成相关需求的30%",
+        "blocks": "无",
+        "next_plan": "1. TSTAS-360",
+        "timestamp": "2025-10-21 20:07:43",
+        "date": "2025-10-21"
+      },
+      {
+        "sender": "熊延福",
+        "tracking_issues": "TSTAS-437",
+        "work_content": "1、讨论437关于Server的心跳方案，设计开发联调，已完成。\n2、继续联调366关于断点续传的业务，整体完成约80%。",
+        "blocks": "无。",
+        "next_plan": "TSTAS-366",
+        "timestamp": "2025-10-21 20:15:52",
+        "date": "2025-10-21"
+      },
+      {
+        "sender": "李尚璋",
+        "tracking_issues": "-",
+        "work_content": "休假",
+        "blocks": "-",
+        "next_plan": "-",
+        "timestamp": "2025-10-21 22:09:58",
+        "date": "2025-10-21"
+      }
+    ],
+    "sent": true
+  },
+  "2025-10-22": {
+    "reports": [
+      {
+        "sender": "秦意军",
+        "tracking_issues": "TSTAS-369、TSTAS-360",
+        "work_content": "1.    初步完成iOS端的XcliB的重构，完成100%的任务进度\n   2.   调研TSTAS-360的File Log日志符合客户要求，完成相关需求的30%",
+        "blocks": "无",
+        "next_plan": "1. TSTAS-360",
+        "timestamp": "2025-10-22 10:17:19",
+        "date": "2025-10-22"
+      },
+      {
+        "sender": "熊延福",
+        "tracking_issues": "-",
+        "work_content": "休假",
+        "blocks": "-",
+        "next_plan": "-",
+        "timestamp": "2025-10-22 10:17:19",
+        "date": "2025-10-22"
+      },
+      {
+        "sender": "FrankCheng",
+        "tracking_issues": "-",
+        "work_content": "休假",
+        "blocks": "-",
+        "next_plan": "-",
+        "timestamp": "2025-10-22 10:17:19",
+        "date": "2025-10-22"
+      },
+      {
+        "sender": "孙康",
+        "tracking_issues": "-",
+        "work_content": "休假",
+        "blocks": "-",
+        "next_plan": "-",
+        "timestamp": "2025-10-22 10:17:19",
+        "date": "2025-10-22"
+      },
+      {
+        "sender": "李尚璋",
+        "tracking_issues": "-",
+        "work_content": "休假",
+        "blocks": "-",
+        "next_plan": "-",
+        "timestamp": "2025-10-22 10:18:04",
+        "date": "2025-10-22"
+      }
+    ],
+    "sent": true
+  },
+  "2025-10-23": {
+    "reports": [
+      {
+        "sender": "李尚璋",
+        "tracking_issues": "TSTAS-434",
+        "work_content": "1 开会确认本周jira问题 TSTAS-434 需要保存已接收/失败/取消的文件，下一次进入app时需要恢复显示数据，需要把所有的数据做本地保存，完成30%",
+        "blocks": "无",
+        "next_plan": "1.TSTAS-434",
+        "message_id": "om_x100b4095ec92185c0f1bc9d10087d05",
+        "timestamp": "2025-10-23 20:05:58",
+        "date": "2025-10-23"
+      }
+    ],
+    "sent": false
+  },
+  "2025-10-27": {
+    "reports": [],
+    "sent": false
+  }
+}
