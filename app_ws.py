@@ -23,6 +23,9 @@ from utils.daily_report_storage import DailyReportStorage
 from utils.report_table_generator import ReportTableGenerator
 from utils.reminder_sender import ReminderSender
 
+# 确保 logs 目录存在
+os.makedirs('logs', exist_ok=True)
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,

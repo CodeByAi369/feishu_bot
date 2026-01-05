@@ -51,17 +51,33 @@ class ReminderSender:
                     data = json.load(f)
                     all_users = data.get('映射', {})
                     
-                    # 如果配置了required_users，只返回这些用户
+                    # 优先使用配置文件中的日报白名单
+                    whitelist = data.get('日报白名单', [])
+                    if whitelist:
+                        filtered_users = {
+                            user_id: name.replace('（领导）', '')  # 去除标记
+                            for user_id, name in all_users.items() 
+                            if user_id in whitelist
+                        }
+                        logger.info(f"使用日报白名单，共 {len(filtered_users)} 人需要提交日报")
+                        return filtered_users
+                    
+                    # 如果没有白名单但配置了required_users，使用required_users
                     if self.required_users:
                         filtered_users = {
-                            user_id: name 
+                            user_id: name.replace('（领导）', '') 
                             for user_id, name in all_users.items() 
                             if user_id in self.required_users
                         }
                         logger.info(f"使用配置的必需用户列表，过滤后: {len(filtered_users)} 人")
                         return filtered_users
                     
-                    return all_users
+                    # 去除所有姓名中的标记
+                    clean_users = {
+                        user_id: name.replace('（领导）', '')
+                        for user_id, name in all_users.items()
+                    }
+                    return clean_users
             else:
                 logger.warning(f"用户姓名映射文件不存在: {user_names_file}")
                 return {}

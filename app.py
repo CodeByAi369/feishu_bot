@@ -7,6 +7,7 @@
 
 import json
 import logging
+import os
 from datetime import datetime
 from flask import Flask
 import lark_oapi as lark
@@ -15,6 +16,9 @@ from lark_oapi.api.im.v1 import *
 from config.config import Config
 from utils.keyword_matcher import KeywordMatcher
 from utils.email_sender import EmailSender
+
+# 确保 logs 目录存在
+os.makedirs('logs', exist_ok=True)
 
 # 配置日志
 logging.basicConfig(

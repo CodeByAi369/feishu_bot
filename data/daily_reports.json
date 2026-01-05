@@ -117,5 +117,60 @@
   "2025-10-27": {
     "reports": [],
     "sent": false
+  },
+  "2026-01-04": {
+    "reports": [
+      {
+        "sender": "熊延福",
+        "tracking_issues": "TSTAS-535",
+        "work_content": "1、开发新建的需求535，整体进度60%，",
+        "blocks": "无。",
+        "next_plan": "TSTAS-535",
+        "message_id": "om_x100b5a90cf0960a0b23d3c5527130c3",
+        "timestamp": "2026-01-04 20:00:00",
+        "date": "2026-01-04"
+      },
+      {
+        "sender": "李尚璋",
+        "tracking_issues": "TSTAS-505",
+        "work_content": "TSTAS-505 整理支持多国语言，第二阶段完支持语言切换完成35%",
+        "blocks": "无",
+        "next_plan": "TSTAS-505",
+        "message_id": "om_x100b5a9128bd38a8b3620c9ef69c1ea",
+        "timestamp": "2026-01-04 20:00:39",
+        "date": "2026-01-04"
+      },
+      {
+        "sender": "孙康",
+        "tracking_issues": "TSTAS-507",
+        "work_content": "1. 处理软件翻译第二阶段内容，目前进度30%。",
+        "blocks": "无",
+        "next_plan": "TSTAS-507",
+        "message_id": "om_x100b5a91397708a8b2cc728fe678b68",
+        "timestamp": "2026-01-04 20:05:15",
+        "date": "2026-01-04"
+      },
+      {
+        "sender": "秦意军",
+        "tracking_issues": "TSTAS-528",
+        "work_content": "1. 处理TSTAS-528 傳檔事件顯示於系統通知 60%\n 2. 和入客户那边整包Code，同步iOS基线代码",
+        "blocks": "无",
+        "next_plan": "TSTAS-528",
+        "message_id": "om_x100b5a91f6d508a4c2b308b6abbd720",
+        "timestamp": "2026-01-04 20:22:25",
+        "date": "2026-01-04"
+      },
+      {
+        "sender": "FrankCheng",
+        "tracking_issues": "TSTAS-508",
+        "work_content": "TSTAS-508 整理支持多国语言，第一阶段完成80%\n2.处理TSTAS-499 验证失败的问题，需要客户把ipad uuid 加到白名单后，再测试",
+        "blocks": "无",
+        "next_plan": "TSTAS-508",
+        "message_id": "om_x100b5a92577ab0b0c14510d43a3173a",
+        "timestamp": "2026-01-04 20:48:27",
+        "date": "2026-01-04"
+      }
+    ],
+    "sent": false
   }
 }

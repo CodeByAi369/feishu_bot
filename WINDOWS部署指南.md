@@ -24,7 +24,7 @@ ImportError: cannot import name 'PBKDF2' from 'cryptography.hazmat.primitives.kd
 venv\Scripts\activate
 
 # 测试加密工具
-python test_encryption.py
+python test_encryption.py 
 
 # 如果显示 "✅ 所有加密模块测试通过！" 说明修复成功
 ```

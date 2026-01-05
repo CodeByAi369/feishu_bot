@@ -3,6 +3,7 @@
 
 # 日志文件
 logs/*.log
+!logs/.gitkeep
 
 # Python
 __pycache__/

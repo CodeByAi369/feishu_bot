@@ -1,106 +1,142 @@
-# 飞书机器人消息监听与邮件转发系统
+# 🤖 飞书机器人消息监听与邮件转发系统
 
-这是一个基于 Python Flask 和飞书官方 lark-oapi SDK 的机器人应用，能够监听飞书群聊消息，检测关键字后自动将消息转发为邮件发送给指定收件人。
+一个功能强大的飞书机器人，支持日报解析、关键词匹配、请假管理、定时提醒等功能。
 
-## 功能特性
+## 🚀 快速开始（30秒部署）
 
+### Windows：
+```bash
+setup_and_start.bat
+```
+
+### Mac/Linux：
+```bash
+python setup_and_start.py
+```
+
+**就这么简单！** 脚本会自动：
+- ✅ 创建虚拟环境并安装依赖
+- ✅ 引导设置密码并加密配置文件
+- ✅ 启动机器人（配置在内存中，安全防护）
+
+---
+
+## ✨ 功能特性
+
+### 核心功能
+- 🔐 **安全加密** - .env 文件加密存储，配置在内存中解密
+- 📊 **日报解析** - 自动识别和解析日报内容，生成报表
+- 🔍 **关键词监听** - 智能匹配关键词并转发邮件
+- 📅 **请假管理** - 请假申请、审批、查询
+- ⏰ **定时提醒** - 未提交日报自动提醒
+- 📧 **邮件转发** - HTML格式邮件自动发送
+- 📝 **完整日志** - 详细的操作和错误日志
+
+### 技术特性
 - ✅ 使用飞书官方 lark-oapi SDK
-- ✅ **支持两种模式**：Webhook 模式和长连接（WebSocket）模式
-- ✅ 监听飞书群组消息
-- ✅ 支持模糊关键字匹配（可配置大小写敏感）
-- ✅ 自动发送HTML格式邮件
-- ✅ 支持一个关键字对应多个收件人
-- ✅ 支持多个关键字规则
-- ✅ 完整的日志记录
-- ✅ 支持本地部署
-- ✅ 自动处理签名验证和 URL 验证
-- ✅ 长连接模式无需公网 IP 和内网穿透
+- ✅ 长连接模式，无需公网 IP
+- ✅ 配置加密存储，内存解密
+- ✅ 自动重连机制
+- ✅ 完整的错误处理
 
-## 两种部署模式对比
+---
 
-| 特性 | Webhook 模式 | 长连接模式（推荐） |
-|------|-------------|-----------------|
-| 需要公网 IP | ✅ 是 | ❌ 否 |
-| 需要内网穿透 | ✅ 是（本地开发） | ❌ 否 |
-| 配置难度 | 中等 | 简单 |
-| 开发速度 | ~1周 | ~5分钟 |
-| 防火墙配置 | 需要 | 不需要 |
-| 适用场景 | 生产环境 | 开发测试/本地部署 |
-
-## 目录结构
+## 📁 项目结构
 
 ```
-feishu_bot_mailer/
-├── app.py                  # Webhook 模式主程序
-├── app_ws.py              # 长连接模式主程序（推荐）
-├── config/                 # 配置目录
-│   ├── config.py          # 配置类
-│   └── keywords.json      # 关键字配置文件
-├── utils/                 # 工具类
-│   ├── keyword_matcher.py # 关键字匹配器
-│   └── email_sender.py    # 邮件发送器
-├── logs/                  # 日志目录
-├── venv/                  # Python 虚拟环境
-├── .env                   # 环境变量配置
-├── .env.example           # 环境变量配置示例
-├── requirements.txt       # Python依赖
-├── start.sh              # Webhook 模式启动脚本
-├── start_ws.sh           # 长连接模式启动脚本（推荐）
-└── README.md             # 说明文档
+feishu_bot/
+├── 🚀 启动脚本
+│   ├── setup_and_start.bat        # Windows 一键启动
+│   └── setup_and_start.py         # Mac/Linux 一键启动
+│
+├── 🔐 安全加密
+│   ├── encrypt_env.py             # 加密/解密工具
+│   └── secure_loader.py           # 内存解密模块
+│
+├── 📱 主程序
+│   ├── app_ws.py                  # 长连接模式主程序
+│   └── app.py                     # Webhook 模式
+│
+├── ⚙️ 配置
+│   ├── config/
+│   │   ├── config.py              # 配置类
+│   │   ├── keywords.json          # 关键词规则
+│   │   └── user_names.json        # 用户姓名映射
+│   ├── .env                       # 环境变量（加密前）
+│   └── .env.encrypted             # 加密后的配置
+│
+├── 🛠️ 工具模块
+│   └── utils/
+│       ├── keyword_matcher.py     # 关键词匹配
+│       ├── email_sender.py        # 邮件发送
+│       ├── daily_report_parser.py # 日报解析
+│       ├── daily_report_storage.py # 日报存储
+│       ├── vacation_manager.py    # 请假管理
+│       ├── reminder_sender.py     # 提醒功能
+│       └── report_table_generator.py # 报表生成
+│
+├── 📊 数据存储
+│   └── data/
+│       ├── daily_reports.json     # 日报数据
+│       └── vacations.json         # 请假数据
+│
+├── 📝 日志
+│   └── logs/
+│
+├── 🧪 测试脚本
+│   ├── test_connection.py         # 测试连接
+│   ├── test_config.py             # 测试配置
+│   ├── test_encryption.py         # 测试加密
+│   └── test_*.py                  # 其他测试
+│
+└── 📚 文档
+    ├── README.md                  # 项目说明
+    ├── 安全部署方案.md            # 安全部署指南
+    └── WINDOWS部署指南.md         # Windows 部署
 ```
 
 ## 部署步骤
 
 ### 1. 创建飞书机器人
 
-1. 访问 [飞书开放平台](https://open.feishu.cn/)
-2. 创建企业自建应用
-3. 获取 **App ID** 和 **App Secret**
-4. 在「应用功能 - 机器人」中启用机器人功能
-5. 在「权限管理」中申请以下权限：
+1. 访问 [飞书开放平台](https://open.feishu.cn/)，创建企业自建应用
+2. 获取 **App ID** 和 **App Secret**
+3. 启用「机器人」功能
+4. 申请权限：
    - `im:message`（接收消息）
    - `im:message.group_at_msg`（接收群组@消息）
+5. 在「事件订阅」中选择「使用长连接」（无需公网 IP）
+6. 发布版本并添加机器人到群组
 
-#### 长连接模式配置（推荐）
+### 2. 配置环境变量
 
-6. 在「事件订阅」中选择「使用长连接」
-   - 无需配置请求网址
-   - 无需公网 IP 或域名
-7. 发布版本并添加机器人到目标群组
+创建 `.env` 文件：
 
-#### Webhook 模式配置（可选）
+```bash
+# 飞书应用配置
+FEISHU_APP_ID=cli_xxxxxxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxxxx
 
-6. 在「事件订阅」中选择「使用 Webhook」
-   - 请求网址：`http://your-server-ip:5000/webhook`
-   - 订阅事件：`接收消息 v2.0` (im.message.receive_v1)
-7. 发布版本并添加机器人到目标群组
+# 邮箱配置
+SMTP_SERVER=smtp.qq.com
+SMTP_PORT=587
+SMTP_USER=your_email@qq.com
+SMTP_PASSWORD=your_auth_code
+SMTP_FROM=your_email@qq.com
 
-### 2. 配置邮箱SMTP
+# 提醒配置（可选）
+REMINDER_CHAT_ID=oc_xxxxxxxxxxxxxx
+REMINDER_TIME=18:00
+```
 
-以下是常用邮箱的SMTP配置：
+常用邮箱 SMTP 配置：
+- **QQ邮箱**: `smtp.qq.com:587`（需要授权码）
+- **Gmail**: `smtp.gmail.com:587`（需要应用专用密码）
+- **163邮箱**: `smtp.163.com:465`
 
-#### Gmail
-- SMTP服务器：`smtp.gmail.com`
-- 端口：`587` (TLS) 或 `465` (SSL)
-- 需要开启「两步验证」并生成「应用专用密码」
+### 3. 启动机器人
 
-#### QQ邮箱
-- SMTP服务器：`smtp.qq.com`
-- 端口：`587` 或 `465`
-- 需要在邮箱设置中开启SMTP服务并获取授权码
-
-#### 163邮箱
-- SMTP服务器：`smtp.163.com`
-- 端口：`25` 或 `465`
-- 需要在邮箱设置中开启SMTP服务
-
-### 3. 安装依赖
-
-本项目使用飞书官方的 lark-oapi SDK 和 Python 虚拟环境。
-
-#### 方式一：使用启动脚本（推荐）
-
-启动脚本会自动创建虚拟环境并安装依赖：
+#### 一键启动（推荐）：
 
 ```bash
 cd ~/feishu_bot_mailer
@@ -111,49 +147,48 @@ cd ~/feishu_bot_mailer
 
 ```bash
 cd ~/feishu_bot_mailer
+```bash
+# Windows
+setup_and_start.bat
 
+# Mac/Linux
+python setup_and_start.py
+```
+
+脚本会自动：
+1. 检查并创建虚拟环境
+2. 安装所需依赖
+3. 引导加密配置文件
+4. 启动机器人
+
+#### 手动启动：
+
+如果需要手动控制环境：
+
+```bash
 # 创建虚拟环境
-python3 -m venv venv
+python -m venv venv
 
-# 激活虚拟环境
+# 激活虚拟环境 (Windows)
+venv\Scripts\activate
+
+# 激活虚拟环境 (Mac/Linux)
 source venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
+
+# 启动机器人
+python app_ws.py
 ```
 
-主要依赖：
-- `Flask`: Web 框架
-- `lark-oapi`: 飞书官方 Python SDK (1.4.23)
-- `python-dotenv`: 环境变量管理
-- `requests`: HTTP 请求库
+---
 
-> **注意**: 本项目使用虚拟环境避免污染系统 Python 环境。macOS 上 Homebrew 安装的 Python 默认不允许全局安装包，必须使用虚拟环境。
+## 📖 使用说明
 
-### 4. 配置环境变量
+### 关键词配置
 
-编辑 `.env` 文件，填写以下配置：
-
-```bash
-# 飞书机器人配置
-FEISHU_APP_ID=cli_xxxxxxxxxxxxx
-FEISHU_APP_SECRET=xxxxxxxxxxxxx
-FEISHU_VERIFICATION_TOKEN=xxxxxxxxxxxxx
-FEISHU_ENCRYPT_KEY=xxxxxxxxxxxxx
-
-# SMTP邮件配置
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASSWORD=your_app_password
-FROM_EMAIL=your_email@gmail.com
-FROM_NAME=飞书消息提醒机器人
-USE_TLS=True
-```
-
-### 5. 配置关键字规则
-
-编辑 `config/keywords.json`，配置关键字和对应的收件人：
+编辑 [config/keywords.json](config/keywords.json)：
 
 ```json
 [
@@ -164,122 +199,144 @@ USE_TLS=True
   {
     "keyword": "故障",
     "recipients": ["ops@example.com", "manager@example.com"]
-  },
-  {
-    "keyword": "报销",
-    "recipients": ["finance@example.com"]
   }
 ]
 ```
 
-### 6. 启动服务
+### 日报功能
 
-#### 长连接模式启动（推荐，无需公网 IP）
+机器人会自动识别日报格式：
+```
+今日完成：
+1. 完成项目A开发
+2. 修复bug #123
 
-**方式一：使用启动脚本**
+明日计划：
+1. 继续项目B
+2. 代码审查
+```
+
+查询命令：
+- `查看日报` - 查看今日所有人的日报
+- `查看未提交` - 查看未提交日报的人员
+
+### 请假功能
+
+申请请假：
+```
+请假
+开始时间：2026-01-05
+结束时间：2026-01-06
+原因：家中有事
+```
+
+查询命令：
+- `查看请假` - 查看所有请假记录
+- `我的请假` - 查看自己的请假记录
+
+### 提醒设置
+
+使用 [setup_reminder.py](setup_reminder.py) 配置定时提醒：
 
 ```bash
-./start_ws.sh
+python setup_reminder.py
 ```
 
-启动成功后会显示：
-```
-======================================
-启动飞书机器人（长连接模式）
-======================================
-正在连接飞书服务器...
-connected to wss://xxxxxxxxx
-```
+---
 
-**方式二：手动启动**
+## 🔐 安全说明
+
+本项目采用加密存储方案：
+- ✅ .env 配置文件加密存储为 .env.encrypted
+- ✅ 配置在内存中解密，不生成明文文件
+- ✅ 其他人无法查看敏感信息
+
+详见 [安全部署方案.md](安全部署方案.md)
+
+---
+
+## 🧪 测试
 
 ```bash
-# 激活虚拟环境
-source venv/bin/activate
+# 测试飞书连接
+python test_connection.py
 
-# 启动长连接服务
-python app_ws.py
+# 测试配置
+python test_config.py
+
+# 测试加密
+python test_encryption.py
 ```
 
-#### Webhook 模式启动（需要公网 IP）
+---
 
-**方式一：使用启动脚本**
+## 📝 日志
 
+日志文件位于 `logs/` 目录：
+- `bot.log` - 机器人运行日志
+- 自动按大小轮转（最大 10MB）
+- 保留最近 5 个日志文件
+
+---
+
+## ❓ 常见问题
+
+### 1. 虚拟环境问题
+**Q: 提示"ModuleNotFoundError: No module named 'xxx'"**
+
+A: 使用一键启动脚本会自动处理，或手动安装：
 ```bash
-./start.sh
+python -m pip install -r requirements.txt
 ```
 
-**方式二：手动启动**
+### 2. PowerShell 执行策略错误
+**Q: Windows 提示"禁止运行脚本"**
 
+A: 直接使用 Python 脚本：
 ```bash
-# 激活虚拟环境
-source venv/bin/activate
-
-# 启动 Webhook 服务
-python app.py
+python setup_and_start.py
 ```
 
-### 7. 配置内网穿透（仅 Webhook 模式需要）
+### 3. 密码忘记
+**Q: 忘记加密密码怎么办？**
 
-**注意：长连接模式无需此步骤！**
+A: 从备份恢复 .env 文件，删除 .env.encrypted，重新运行 setup_and_start.bat
 
-如果使用 Webhook 模式，由于飞书需要公网可访问的地址，本地部署需要配置内网穿透：
+### 4. 机器人无响应
+**Q: 机器人不回复消息**
 
-#### 使用 ngrok（推荐）
-```bash
-# 安装ngrok
-brew install ngrok
+A: 检查：
+1. 日志中是否有连接成功提示
+2. 机器人是否在群组中
+3. 是否有权限（im:message）
+4. 环境变量是否正确配置
 
-# 启动内网穿透
-ngrok http 5000
-```
+### 5. 邮件发送失败
+**Q: 关键词触发但邮件未发送**
 
-将 ngrok 提供的公网地址（如 `https://xxxx.ngrok.io`）配置到飞书开放平台的「事件订阅 - 请求网址」：
-```
-https://xxxx.ngrok.io/webhook
-```
+A: 检查：
+1. SMTP 配置是否正确
+2. 是否开启了邮箱的 SMTP 服务
+3. 是否使用了授权码（不是登录密码）
+4. 查看日志中的详细错误信息
 
-#### 使用 frp
-也可以使用 frp 等其他内网穿透工具。
+---
 
-## 使用说明
+## 📄 许可证
 
-1. 确保机器人已添加到目标群组
-2. 启动服务后，机器人会自动监听群消息
-3. 当群成员发送包含关键字的消息时，系统会：
-   - 检测消息中的关键字（模糊匹配）
-   - 提取消息内容和发送者信息
-   - 格式化为HTML邮件
-   - 发送给配置的收件人
+MIT License
 
-### 示例
+---
 
-**群聊消息：**
-```
-@机器人 线上服务出现故障，需要紧急处理！
-```
+## 🤝 贡献
 
-**触发关键字：** `故障`, `紧急`
+欢迎提交 Issue 和 Pull Request！
 
-**发送邮件：**
-- 收件人：`ops@example.com`, `manager@example.com`, `urgent@example.com`
-- 主题：`[飞书消息提醒] 检测到关键字: 故障`
-- 正文包含：发送者、时间、群组、完整消息内容
+---
 
-## 测试
+## 📮 联系方式
 
-### 测试健康检查
-```bash
-curl http://localhost:5000/health
-```
-
-### 测试消息接收
-在飞书群组中发送包含关键字的消息，观察日志输出：
-```bash
-tail -f logs/bot.log
-```
-
-## 常见问题
+如有问题，请提交 Issue。
 
 ### Q1: WebSocket连接频繁断开？⭐⭐⭐⭐⭐
 
