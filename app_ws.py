@@ -37,6 +37,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 屏蔽飞书 SDK 的 WebSocket 连接日志噪音
+# "no close frame received or sent" 是正常的连接刷新，不是真正的错误
+logging.getLogger('Lark').setLevel(logging.CRITICAL)  # 只显示严重错误
+
 # 初始化配置和工具类
 config = Config()
 keyword_matcher = KeywordMatcher(config)
@@ -395,6 +399,11 @@ def handle_message(data: P2ImMessageReceiveV1):
             trigger_keywords = ["汇总日报", "发送日报", "日报汇总", "汇总", "发送汇总"]
             if any(keyword in text for keyword in trigger_keywords):
                 logger.info("🎯 检测到汇总命令，开始执行汇总...")
+                # 避免重复发送
+                if report_storage.is_sent():
+                    logger.info("ℹ️  今日日报汇总已发送，忽略本次手动汇总命令")
+                    return
+
                 send_daily_report_summary()
                 return  # 处理完汇总命令后直接返回
 
@@ -646,6 +655,8 @@ def send_daily_report_summary():
 
         if success:
             logger.info(f"✅ 日报汇总邮件发送成功 - 收件人: {recipients}")
+            # 标记为已发送，避免自动/手动重复发送
+            report_storage.mark_as_sent()
             # 清空已发送的日报
             # report_storage.clear_reports()  # 可选：如果希望发送后清空
         else:
@@ -679,8 +690,30 @@ def check_and_send_if_all_ready():
             logger.info(f"📝 当前 {current_count}/{expected_count} 份日报，未达到预期人数，不发送")
             return
         
-        # 检查是否所有用户的计时器都已结束（即所有人都已稳定）
-        active_timers = sum(1 for info in user_timers.values() if info.get('timer') and info['timer'].is_alive())
+        # 检查是否所有用户都已超过10分钟容错期
+        # 注意：Timer 的回调执行期间 is_alive() 仍可能为 True（会导致误判“还有1人容错期内”）。
+        now = datetime.now()
+        grace_seconds = 600
+
+        # 清理已过期的容错期记录，避免影响统计
+        expired_names = []
+        for name, info in user_timers.items():
+            submit_time = info.get('submit_time')
+            if isinstance(submit_time, datetime):
+                if (now - submit_time).total_seconds() >= grace_seconds:
+                    expired_names.append(name)
+
+        for name in expired_names:
+            # 不依赖 cancel：到期后可能正在执行回调
+            user_timers.pop(name, None)
+
+        # 仍在容错期内的用户数（基于 submit_time 判定）
+        active_timers = 0
+        for info in user_timers.values():
+            submit_time = info.get('submit_time')
+            if isinstance(submit_time, datetime):
+                if (now - submit_time).total_seconds() < grace_seconds:
+                    active_timers += 1
         
         if active_timers > 0:
             logger.info(f"⏱️  还有 {active_timers} 个用户在容错期内，暂不发送")
@@ -689,9 +722,6 @@ def check_and_send_if_all_ready():
         # 所有条件满足，发送邮件
         logger.info(f"🎉 所有 {current_count} 位用户已稳定，发送日报汇总邮件")
         send_daily_report_summary()
-        
-        # 标记为已发送
-        report_storage.mark_as_sent()
         
         # 清空用户计时器
         user_timers.clear()
@@ -712,6 +742,8 @@ def schedule_user_timer(sender_name: str, message_id: str):
                 old_timer.cancel()
                 logger.info(f"⏱️  取消 {sender_name} 之前的容错期计时器")
         
+        submit_time = datetime.now()
+
         # 创建新的10分钟延迟任务（用户特定）
         def user_timer_callback():
             logger.info(f"⏰ {sender_name} 的10分钟容错期结束")
@@ -726,10 +758,10 @@ def schedule_user_timer(sender_name: str, message_id: str):
         user_timers[sender_name] = {
             'timer': timer,
             'message_id': message_id,
-            'submit_time': datetime.now()
+            'submit_time': submit_time
         }
         
-        send_time = (datetime.now() + timedelta(minutes=10)).strftime('%H:%M:%S')
+        send_time = (submit_time + timedelta(minutes=10)).strftime('%H:%M:%S')
         logger.info(f"⏱️  已为 {sender_name} 启动10分钟容错期，将在 {send_time} 结束")
         
     except Exception as e:
