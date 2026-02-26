@@ -1,0 +1,24 @@
+{
+  "2026": {
+    "2026-01-01": {
+      "name": "元旦",
+      "is_workday": false,
+      "type": "holiday"
+    },
+    "2026-04-05": {
+      "name": "清明节",
+      "is_workday": false,
+      "type": "holiday"
+    },
+    "2026-05-01": {
+      "name": "劳动节",
+      "is_workday": false,
+      "type": "holiday"
+    },
+    "2026-10-01": {
+      "name": "国庆节",
+      "is_workday": false,
+      "type": "holiday"
+    }
+  }
+}
