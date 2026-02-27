@@ -9,12 +9,15 @@
 import json
 import logging
 import os
+import sys
+import signal
+import time
 from datetime import datetime, timedelta
+from threading import Thread, Event, Timer
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 from lark_oapi.ws import Client as WSClient
 from apscheduler.schedulers.background import BackgroundScheduler
-from threading import Timer
 from config.config import Config
 from utils.keyword_matcher import KeywordMatcher
 from utils.email_sender import EmailSender
@@ -22,6 +25,9 @@ from utils.daily_report_parser import DailyReportParser
 from utils.daily_report_storage import DailyReportStorage
 from utils.report_table_generator import ReportTableGenerator
 from utils.reminder_sender import ReminderSender
+from utils.vacation_manager import VacationManager
+from utils.command_router import get_command_router
+from utils.command_handler import CommandHandler
 
 # 确保 logs 目录存在
 os.makedirs('logs', exist_ok=True)
@@ -51,6 +57,9 @@ report_parser = DailyReportParser()
 report_storage = DailyReportStorage(config.DAILY_REPORT_STORAGE_FILE)
 table_generator = ReportTableGenerator()
 reminder_sender = ReminderSender(config.APP_ID, config.APP_SECRET, config.DAILY_REPORT_REQUIRED_USERS)
+vacation_manager = VacationManager(config.VACATION_STORAGE_FILE)
+command_router = get_command_router()
+command_handler = CommandHandler(config.APP_ID, config.APP_SECRET)
 
 # 初始化定时任务调度器
 scheduler = BackgroundScheduler()
@@ -58,6 +67,10 @@ scheduler = BackgroundScheduler()
 # 用户级别的容错期管理
 # 结构：{sender_name: {'timer': Timer对象, 'message_id': str, 'submit_time': datetime}}
 user_timers = {}
+
+# WebSocket连接管理
+ws_client = None
+shutdown_event = Event()
 
 # 加载用户姓名映射
 user_names_map = {}
@@ -70,6 +83,78 @@ try:
             logger.info(f"加载用户姓名映射: {len(user_names_map)} 个用户")
 except Exception as e:
     logger.warning(f"加载用户姓名映射失败: {str(e)}")
+
+
+def parse_date_from_command(text: str) -> str:
+    """
+    从命令中解析日期参数
+    
+    支持格式：
+    - "汇总昨天日报" -> 昨天的日期
+    - "汇总1.14日报" -> 2026-01-14
+    - "汇总1月14日报" -> 2026-01-14
+    - "汇总2026-01-14日报" -> 2026-01-14
+    - "汇总日报" -> 智能判断（如果今天有日报用今天，否则用昨天）
+    
+    Args:
+        text: 命令文本
+        
+    Returns:
+        str: 日期字符串 (YYYY-MM-DD)
+    """
+    import re
+    
+    # 检查是否指定了"昨天"
+    if "昨天" in text or "昨日" in text:
+        yesterday = datetime.now() - timedelta(days=1)
+        return yesterday.strftime('%Y-%m-%d')
+    
+    # 检查是否指定了"前天"
+    if "前天" in text:
+        day_before_yesterday = datetime.now() - timedelta(days=2)
+        return day_before_yesterday.strftime('%Y-%m-%d')
+    
+    # 检查完整日期格式：YYYY-MM-DD 或 YYYY/MM/DD
+    match = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', text)
+    if match:
+        year, month, day = match.groups()
+        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+    
+    # 检查月日格式：MM.DD 或 M.D
+    match = re.search(r'(\d{1,2})\.(\d{1,2})', text)
+    if match:
+        month, day = match.groups()
+        year = datetime.now().year
+        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+    
+    # 检查中文月日格式：M月D日 或 M月D号
+    match = re.search(r'(\d{1,2})月(\d{1,2})[日号]', text)
+    if match:
+        month, day = match.groups()
+        year = datetime.now().year
+        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+    
+    # 如果没有指定日期，智能判断
+    today = datetime.now().strftime('%Y-%m-%d')
+    today_count = report_storage.get_report_count(today)
+    
+    if today_count > 0:
+        # 今天有日报，使用今天
+        return today
+    else:
+        # 今天没有日报，使用昨天
+        yesterday = datetime.now() - timedelta(days=1)
+        yesterday_date = yesterday.strftime('%Y-%m-%d')
+        yesterday_count = report_storage.get_report_count(yesterday_date)
+        
+        if yesterday_count > 0:
+            logger.info(f"💡 今天无日报，自动使用昨天的日期: {yesterday_date} ({yesterday_count}份)")
+            return yesterday_date
+        else:
+            # 都没有，还是返回今天
+            logger.info(f"⚠️  今天和昨天都没有日报，使用今天日期: {today}")
+            return today
+
 
 
 def get_user_name(sender_data, chat_id: str) -> str:
@@ -189,6 +274,27 @@ def save_user_to_config(user_id: str, name: str):
 
     except Exception as e:
         logger.warning(f"保存用户映射到配置文件失败: {str(e)}")
+
+
+def send_text_message(chat_id: str, text: str):
+    """发送文本消息到群聊"""
+    client = lark.Client.builder() \
+        .app_id(config.APP_ID) \
+        .app_secret(config.APP_SECRET) \
+        .build()
+
+    request = CreateMessageRequest.builder() \
+        .receive_id_type("chat_id") \
+        .request_body(CreateMessageRequestBody.builder()
+            .receive_id(chat_id)
+            .msg_type("text")
+            .content(json.dumps({"text": text}, ensure_ascii=False))
+            .build()) \
+        .build()
+
+    response = client.im.v1.message.create(request)
+    if not response.success():
+        raise RuntimeError(f"发送文本消息失败: {response.msg}")
 
 
 def extract_text_from_post(content_json: dict) -> str:
@@ -365,6 +471,37 @@ def handle_message(data: P2ImMessageReceiveV1):
         if not text:
             return
 
+        # 0.1 优先处理斜杠命令
+        if config.COMMAND_ENABLED and command_router.is_command(text):
+            logger.info(f"💬 检测到命令: {text}")
+            cmd_info = command_router.parse_command(text)
+            if not cmd_info:
+                logger.warning(f"命令解析失败: {text}")
+                return
+
+            # 获取发送者信息用于命令上下文
+            sender = data.event.sender
+            sender_user_id = sender.sender_id.user_id if (sender.sender_id and sender.sender_id.user_id) else None
+            sender_name = get_user_name(sender, chat_id)
+
+            context = {
+                'user_id': sender_user_id,
+                'user_name': sender_name,
+                'chat_id': chat_id,
+            }
+            response_text = command_handler.handle_command(
+                cmd_info['command'],
+                cmd_info['args'],
+                context,
+            )
+
+            if response_text:
+                try:
+                    send_text_message(chat_id, response_text)
+                except Exception as send_err:
+                    logger.error(f"发送命令响应失败: {send_err}", exc_info=True)
+            return
+
         # 获取发送者信息
         sender = data.event.sender
         sender_id = sender.sender_id.open_id if (sender.sender_id and sender.sender_id.open_id) else 'unknown'
@@ -378,6 +515,65 @@ def handle_message(data: P2ImMessageReceiveV1):
         msg_time = datetime.fromtimestamp(int(create_time) / 1000).strftime('%Y-%m-%d %H:%M:%S') if create_time else 'unknown'
 
         logger.info(f"处理消息 - 发送者: {sender_name} ({sender_user_id}), 群组: {chat_id}, 内容: {text}")
+
+        # 0. 检查是否为休假命令 (格式: @某人#休假 或 某人#休假)
+        if "#休假" in text:
+            logger.info("🏖️  检测到休假命令...")
+            # 支持两种格式：
+            # 1. @某人#休假 -> 从text中提取 @_user_X#休假，然后从 sender_name 或配置中查找真实姓名
+            # 2. 某人#休假 -> 直接从文本提取姓名
+            
+            import re
+            # 尝试匹配 "姓名#休假" 格式
+            vacation_match = re.search(r'([^@\s]+)#休假', text)
+            if vacation_match:
+                name_part = vacation_match.group(1)
+                
+                # 如果是 _user_X 格式，说明是 @mention，需要从 user_names_map 反查
+                if name_part.startswith('_user_'):
+                    # 从富文本中获取被@的用户ID
+                    # 由于无法直接获取，我们需要从配置的必填用户列表中匹配
+                    logger.info(f"检测到 @mention 休假命令，文本: {text}")
+                    # 暂时跳过，提示用户使用姓名格式
+                    logger.warning("⚠️  暂不支持 @mention 格式设置休假，请使用 '姓名#休假' 格式")
+                    logger.warning("   例如: 李尚璋#休假")
+                    return
+                else:
+                    # 直接使用提取的姓名
+                    vacation_user = name_part.strip()
+                    
+                    # 设置休假
+                    success = vacation_manager.set_vacation(vacation_user)
+                    if success:
+                        logger.info(f"✅ 已设置 {vacation_user} 休假")
+                        
+                        # 自动为该用户生成休假日报
+                        today = datetime.now().strftime('%Y-%m-%d')
+                        vacation_report = {
+                            'sender': vacation_user,
+                            'tracking_issues': '-',
+                            'work_content': '休假',
+                            'blocks': '-',
+                            'next_plan': '-',
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'date': today,
+                            'message_id': f"vacation_{vacation_user}_{today}"
+                        }
+                        
+                        # 检查是否已有日报（通过查找发送者）
+                        existing_reports = report_storage.get_all_reports(today)
+                        has_report = any(r.get('sender') == vacation_user for r in existing_reports)
+                        
+                        if not has_report:
+                            report_storage.add_report(vacation_report)
+                            current_count = report_storage.get_report_count()
+                            logger.info(f"📝 已自动添加休假日报 - {vacation_user}，当前共 {current_count} 份日报")
+                        else:
+                            logger.info(f"💡 {vacation_user} 今天已有日报记录，跳过添加休假日报")
+                    return
+            else:
+                logger.warning("⚠️  无法解析休假命令格式，请使用: 姓名#休假")
+                return
 
         # 1. 检查是否为获取成员列表命令
         get_members_keywords = ["获取成员列表", "成员列表", "群成员", "获取群成员"]
@@ -396,15 +592,21 @@ def handle_message(data: P2ImMessageReceiveV1):
         # 2. 检查是否为手动触发汇总命令
         if config.DAILY_REPORT_ENABLED and config.DAILY_REPORT_SEND_MODE == 'manual':
             # 检测汇总命令：支持 "汇总日报"、"发送日报"、"日报汇总" 等
-            trigger_keywords = ["汇总日报", "发送日报", "日报汇总", "汇总", "发送汇总"]
+            trigger_keywords = ["汇总日报", "发送日报", "日报汇总", "汇总", "发送汇总", "邮件汇总"]
             if any(keyword in text for keyword in trigger_keywords):
                 logger.info("🎯 检测到汇总命令，开始执行汇总...")
-                # 避免重复发送
-                if report_storage.is_sent():
-                    logger.info("ℹ️  今日日报汇总已发送，忽略本次手动汇总命令")
+                
+                # 解析日期参数
+                target_date = parse_date_from_command(text)
+                logger.info(f"📅 汇总目标日期: {target_date}")
+                
+                # 检查该日期是否已发送
+                if report_storage.is_sent(target_date):
+                    report_count = report_storage.get_report_count(target_date)
+                    logger.info(f"ℹ️  {target_date} 的日报汇总已发送（共{report_count}份），忽略本次手动汇总命令")
                     return
 
-                send_daily_report_summary()
+                send_daily_report_summary(target_date)
                 return  # 处理完汇总命令后直接返回
 
         # 2. 检查是否为日报并存储
@@ -620,21 +822,29 @@ def send_single_report(report_data: dict):
         logger.error(f"发送单个日报失败: {str(e)}", exc_info=True)
 
 
-def send_daily_report_summary():
-    """定时汇总并发送日报邮件"""
+def send_daily_report_summary(target_date: str = None):
+    """定时汇总并发送日报邮件
+    
+    Args:
+        target_date: 目标日期 (YYYY-MM-DD)，默认为今天
+    """
     try:
         logger.info("=" * 60)
         logger.info("📊 开始执行日报汇总任务...")
 
-        # 获取所有日报
-        reports = report_storage.get_all_reports()
+        # 确定目标日期
+        if target_date is None:
+            target_date = datetime.now().strftime('%Y-%m-%d')
+        
+        # 获取指定日期的日报
+        reports = report_storage.get_all_reports(target_date)
         report_count = len(reports)
 
-        logger.info(f"当前收集到 {report_count} 份日报")
+        logger.info(f"当前收集到 {report_count} 份日报（日期: {target_date}）")
 
         # 生成HTML表格（使用新的日期格式）
-        current_date = datetime.now().strftime('%Y/%m/%d')  # 修改日期格式为 YYYY/MM/DD
-        html_content = table_generator.generate_html_table(reports, current_date)
+        display_date = datetime.strptime(target_date, '%Y-%m-%d').strftime('%Y/%m/%d')
+        html_content = table_generator.generate_html_table(reports, display_date)
 
         # 发送邮件
         recipients = config.DAILY_REPORT_RECIPIENTS
@@ -643,7 +853,7 @@ def send_daily_report_summary():
             return
 
         # 修改邮件标题格式
-        subject = f"［Realtek]［资源共享］Realtek-TS-Task开发日报 {current_date} - 共 {report_count} 份"
+        subject = f"［Realtek]［资源共享］Realtek-TS-Task开发日报 {display_date} - 共 {report_count} 份"
 
         success = email_sender.send_email(
             recipients=recipients,
@@ -656,7 +866,7 @@ def send_daily_report_summary():
         if success:
             logger.info(f"✅ 日报汇总邮件发送成功 - 收件人: {recipients}")
             # 标记为已发送，避免自动/手动重复发送
-            report_storage.mark_as_sent()
+            report_storage.mark_as_sent(target_date)
             # 清空已发送的日报
             # report_storage.clear_reports()  # 可选：如果希望发送后清空
         else:
@@ -709,14 +919,18 @@ def check_and_send_if_all_ready():
 
         # 仍在容错期内的用户数（基于 submit_time 判定）
         active_timers = 0
-        for info in user_timers.values():
+        active_users = []
+        for name, info in user_timers.items():
             submit_time = info.get('submit_time')
             if isinstance(submit_time, datetime):
-                if (now - submit_time).total_seconds() < grace_seconds:
+                elapsed = (now - submit_time).total_seconds()
+                if elapsed < grace_seconds:
                     active_timers += 1
+                    remaining = grace_seconds - elapsed
+                    active_users.append(f"{name}(剩余{remaining:.0f}秒)")
         
         if active_timers > 0:
-            logger.info(f"⏱️  还有 {active_timers} 个用户在容错期内，暂不发送")
+            logger.info(f"⏱️  还有 {active_timers} 个用户在容错期内: {', '.join(active_users)}，暂不发送")
             return
         
         # 所有条件满足，发送邮件
@@ -747,6 +961,17 @@ def schedule_user_timer(sender_name: str, message_id: str):
         # 创建新的10分钟延迟任务（用户特定）
         def user_timer_callback():
             logger.info(f"⏰ {sender_name} 的10分钟容错期结束")
+            # 关键修复：回调触发时先移除本人的容错记录。
+            # 否则在极端情况下（回调略早于600秒），check 会认为“还有1人容错期内”而直接 return，
+            # 且之后没有新的回调触发检查，导致永远不自动发送。
+            user_timers.pop(sender_name, None)
+
+            logger.info(f"📋 当前容错期状态: {len(user_timers)} 个用户在容错队列中")
+            for uname, uinfo in user_timers.items():
+                usubmit = uinfo.get('submit_time')
+                if isinstance(usubmit, datetime):
+                    uelapsed = (datetime.now() - usubmit).total_seconds()
+                    logger.info(f"   - {uname}: 已提交 {uelapsed:.0f} 秒")
             # 检查是否可以发送
             check_and_send_if_all_ready()
         
@@ -787,6 +1012,36 @@ def check_and_send_reminder():
 
     except Exception as e:
         logger.error(f"日报提醒任务失败: {str(e)}", exc_info=True)
+
+
+# ============================================================
+# 注意：已移除基于"无消息超时"的健康监控
+# ============================================================
+# 原因：群里没人说话是正常情况，不应该触发重启
+# WebSocket SDK已经内置了 auto_reconnect=True 功能，会自动处理连接断开
+# 如果确实需要监控，应该使用SDK的连接状态回调或心跳机制
+
+def monitor_websocket_health():
+    """[已禁用] 旧的健康监控逻辑有缺陷"""
+    # 这个函数已经不再使用
+    # 原逻辑问题：5分钟没消息就认为连接断开是错误的判断
+    # 正确做法：依赖SDK的auto_reconnect功能
+    pass
+
+
+def signal_handler(signum, frame):
+    """处理退出信号"""
+    logger.info("\n收到退出信号，正在关闭...")
+    shutdown_event.set()
+    
+    # 关闭定时任务调度器
+    if config.DAILY_REPORT_ENABLED and scheduler.running:
+        scheduler.shutdown()
+        logger.info("定时任务调度器已关闭")
+    
+    logger.info("服务已停止")
+    sys.exit(0)
+
 
 
 if __name__ == '__main__':
@@ -904,15 +1159,20 @@ if __name__ == '__main__':
         auto_reconnect=True  # 自动重连
     )
 
+    # 注册信号处理器
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     # 重连计数器
     reconnect_count = 0
-    max_reconnect_attempts = 3  # 最多连续重连3次后提示
+    max_reconnect_attempts = 5  # 增加到5次
 
     try:
         logger.info("=" * 60)
         logger.info("🔌 正在连接飞书服务器...")
         logger.info("   - 使用WebSocket长连接")
-        logger.info("   - 自动重连已启用")
+        logger.info("   - SDK自动重连已启用")
+        logger.info("   - 连接异常时会自动尝试重连")
         logger.info("=" * 60)
 
         # 启动长连接（会阻塞）
@@ -920,6 +1180,7 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         logger.info("\n收到退出信号，正在关闭...")
+        shutdown_event.set()
     except Exception as e:
         reconnect_count += 1
         logger.error(f"❌ 长连接异常 (第{reconnect_count}次): {str(e)}", exc_info=True)
@@ -932,7 +1193,11 @@ if __name__ == '__main__':
             logger.error("   3. 是否有防火墙或代理阻止WebSocket连接")
             logger.error("   4. 尝试切换网络环境（如关闭VPN）")
             logger.error("=" * 60)
+            shutdown_event.set()
     finally:
+        # 设置退出标志
+        shutdown_event.set()
+        
         # 关闭定时任务调度器
         if config.DAILY_REPORT_ENABLED and scheduler.running:
             scheduler.shutdown()
