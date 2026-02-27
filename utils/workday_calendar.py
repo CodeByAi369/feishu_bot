@@ -8,6 +8,7 @@
 import json
 import logging
 import os
+import time
 import requests
 from datetime import datetime
 from typing import Dict, Optional
@@ -54,6 +55,9 @@ class WorkdayCalendar:
             
         Returns:
             bool: True表示工作日，False表示休息日
+            
+        Note:
+            If holiday data is unavailable, falls back to weekend detection (Mon-Fri = workday)
         """
         if date is None:
             date = datetime.now().strftime('%Y-%m-%d')
@@ -131,57 +135,73 @@ class WorkdayCalendar:
             return False
     
     def _fetch_from_api(self, year: int) -> bool:
-        """从API获取节假日数据"""
-        try:
-            url = self.API_URL.format(year=year)
-            response = requests.get(url, timeout=10)
+        """从API获取节假日数据（带重试逻辑）"""
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                url = self.API_URL.format(year=year)
+                response = requests.get(url, timeout=10)
+                
+                if response.status_code != 200:
+                    logger.warning(f"API返回错误: {response.status_code}，尝试 {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    return False
             
-            if response.status_code != 200:
-                logger.error(f"API返回错误: {response.status_code}")
-                return False
-            
-            data = response.json()
-            
-            # timor.tech API 返回格式：
-            # {
-            #   "code": 0,
-            #   "holiday": {
-            #     "01-01": {"holiday": true, "name": "元旦", "wage": 3, "date": "2026-01-01"}
-            #   }
-            # }
-            
-            if data.get('code') != 0:
-                logger.error(f"API返回错误代码: {data.get('code')}")
-                return False
-            
-            holiday_data = data.get('holiday', {})
-            
-            # 转换格式
-            year_holidays = {}
-            for day_key, day_info in holiday_data.items():
-                date_str = day_info.get('date')
-                if not date_str:
+                data = response.json()
+                
+                # timor.tech API 返回格式：
+                # {
+                #   "code": 0,
+                #   "holiday": {
+                #     "01-01": {"holiday": true, "name": "元旦", "wage": 3, "date": "2026-01-01"}
+                #   }
+                # }
+                
+                if data.get('code') != 0:
+                    logger.warning(f"API返回错误代码: {data.get('code')}，尝试 {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    return False
+                
+                holiday_data = data.get('holiday', {})
+                
+                # 转换格式
+                year_holidays = {}
+                for day_key, day_info in holiday_data.items():
+                    date_str = day_info.get('date')
+                    if not date_str:
+                        continue
+                    
+                    # 判断是否为工作日
+                    # holiday=true 表示休息，holiday=false 或不存在表示工作日
+                    is_holiday = day_info.get('holiday', False)
+                    
+                    year_holidays[date_str] = {
+                        'name': day_info.get('name', ''),
+                        'is_workday': not is_holiday,
+                        'type': 'holiday' if is_holiday else 'workday'
+                    }
+                
+                self.holidays_data[str(year)] = year_holidays
+                return True
+                
+            except requests.RequestException as e:
+                logger.warning(f"API请求失败: {e}，尝试 {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
                     continue
-                
-                # 判断是否为工作日
-                # holiday=true 表示休息，holiday=false 或不存在表示工作日
-                is_holiday = day_info.get('holiday', False)
-                
-                year_holidays[date_str] = {
-                    'name': day_info.get('name', ''),
-                    'is_workday': not is_holiday,
-                    'type': 'holiday' if is_holiday else 'workday'
-                }
-            
-            self.holidays_data[str(year)] = year_holidays
-            return True
-            
-        except requests.RequestException as e:
-            logger.error(f"API请求失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"解析API数据失败: {e}")
-            return False
+            except Exception as e:
+                logger.error(f"解析API数据失败: {e}")
+                return False
+        
+        # 所有重试都失败
+        logger.error(f"API请求失败，已重试{max_retries}次")
+        return False
     
     def _load_from_config(self, year: int) -> bool:
         """从本地配置加载"""
