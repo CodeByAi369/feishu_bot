@@ -372,6 +372,23 @@ def build_command_menu_card() -> dict:
                 ]
             },
             {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "➕ 设置调休（表单）"},
+                        "type": "primary",
+                        "value": {"cmd": "open_set_vacation_form"}
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "➖ 取消调休（表单）"},
+                        "type": "danger",
+                        "value": {"cmd": "open_cancel_vacation_form"}
+                    }
+                ]
+            },
+            {
                 "tag": "note",
                 "elements": [
                     {
@@ -384,15 +401,108 @@ def build_command_menu_card() -> dict:
     }
 
 
+def build_set_vacation_form_card() -> dict:
+    """构建设置调休表单卡片"""
+    return {
+        "config": {
+            "wide_screen_mode": True
+        },
+        "header": {
+            "template": "green",
+            "title": {
+                "tag": "plain_text",
+                "content": "➕ 设置调休"
+            }
+        },
+        "elements": [
+            {
+                "tag": "input",
+                "name": "vacation_name",
+                "required": True,
+                "placeholder": {
+                    "tag": "plain_text",
+                    "content": "请输入姓名（如：张三）"
+                }
+            },
+            {
+                "tag": "date_picker",
+                "name": "vacation_date",
+                "placeholder": {
+                    "tag": "plain_text",
+                    "content": "请选择日期（不选默认今天）"
+                }
+            },
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "提交设置"},
+                        "type": "primary",
+                        "value": {"cmd": "set_vacation_submit"}
+                    }
+                ]
+            }
+        ]
+    }
+
+
+def build_cancel_vacation_form_card() -> dict:
+    """构建取消调休表单卡片"""
+    return {
+        "config": {
+            "wide_screen_mode": True
+        },
+        "header": {
+            "template": "red",
+            "title": {
+                "tag": "plain_text",
+                "content": "➖ 取消调休"
+            }
+        },
+        "elements": [
+            {
+                "tag": "input",
+                "name": "vacation_name",
+                "required": True,
+                "placeholder": {
+                    "tag": "plain_text",
+                    "content": "请输入姓名（如：张三）"
+                }
+            },
+            {
+                "tag": "date_picker",
+                "name": "vacation_date",
+                "placeholder": {
+                    "tag": "plain_text",
+                    "content": "请选择日期（不选默认今天）"
+                }
+            },
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "提交取消"},
+                        "type": "danger",
+                        "value": {"cmd": "cancel_vacation_submit"}
+                    }
+                ]
+            }
+        ]
+    }
+
+
 def handle_card_action(data: P2CardActionTrigger):
     """处理卡片按钮点击回调"""
     try:
         action_value = (data.event.action.value if data and data.event and data.event.action else {}) or {}
+        form_value = (data.event.action.form_value if data and data.event and data.event.action else {}) or {}
         cmd = action_value.get('cmd')
         open_chat_id = data.event.context.open_chat_id if data and data.event and data.event.context else None
         operator_user_id = data.event.operator.user_id if data and data.event and data.event.operator else None
 
-        logger.info(f"🎛️ 收到卡片点击回调: cmd={cmd}, user_id={operator_user_id}")
+        logger.info(f"🎛️ 收到卡片点击回调: cmd={cmd}, user_id={operator_user_id}, form_keys={list(form_value.keys())}")
 
         if not open_chat_id or not cmd:
             logger.warning("卡片回调缺少 open_chat_id 或 cmd")
@@ -414,6 +524,22 @@ def handle_card_action(data: P2CardActionTrigger):
             response_text = command_handler.handle_command('query_vacation', [], context)
         elif cmd == 'help_text':
             response_text = command_handler.handle_command('help', [], context)
+        elif cmd == 'open_set_vacation_form':
+            send_interactive_card(open_chat_id, build_set_vacation_form_card(), receive_id_type="open_chat_id")
+            return
+        elif cmd == 'open_cancel_vacation_form':
+            send_interactive_card(open_chat_id, build_cancel_vacation_form_card(), receive_id_type="open_chat_id")
+            return
+        elif cmd == 'set_vacation_submit':
+            name = (form_value.get('vacation_name') or '').strip()
+            date = (form_value.get('vacation_date') or '').strip()
+            args = [name] + ([date] if date else [])
+            response_text = command_handler.handle_command('set_vacation', args, context)
+        elif cmd == 'cancel_vacation_submit':
+            name = (form_value.get('vacation_name') or '').strip()
+            date = (form_value.get('vacation_date') or '').strip()
+            args = [name] + ([date] if date else [])
+            response_text = command_handler.handle_command('cancel_vacation', args, context)
 
         if response_text:
             send_text_message(open_chat_id, response_text, receive_id_type="open_chat_id")
