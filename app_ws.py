@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from threading import Thread, Event, Timer
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
+from lark_oapi.api.application.v6.model.p2_application_bot_menu_v6 import P2ApplicationBotMenuV6
 from lark_oapi.ws import Client as WSClient
 from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTrigger
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -545,6 +546,55 @@ def handle_card_action(data: P2CardActionTrigger):
             send_text_message(open_chat_id, response_text, receive_id_type="open_chat_id")
     except Exception as e:
         logger.error(f"处理卡片回调失败: {e}", exc_info=True)
+
+
+def handle_bot_menu_event(data: P2ApplicationBotMenuV6):
+    """处理机器人菜单点击事件（无需先输入 /帮助）"""
+    try:
+        event_key = data.event.event_key if data and data.event else None
+        operator = data.event.operator if data and data.event else None
+        operator_name = operator.operator_name if operator else "未知用户"
+        operator_id = operator.operator_id if operator else None
+        user_id = operator_id.user_id if operator_id else None
+
+        logger.info(f"📋 收到机器人菜单事件: event_key={event_key}, user_id={user_id}, name={operator_name}")
+
+        if not event_key or not user_id:
+            logger.warning("机器人菜单事件缺少 event_key 或 user_id")
+            return
+
+        context = {
+            'user_id': user_id,
+            'user_name': operator_name,
+            'chat_id': None,
+        }
+
+        if event_key == 'menu_help':
+            send_interactive_card(user_id, build_command_menu_card(), receive_id_type="user_id")
+            return
+
+        response_text = None
+        if event_key == 'menu_summary_today':
+            response_text = command_handler.handle_command('summary', [], context)
+        elif event_key == 'menu_my_report':
+            response_text = command_handler.handle_command('my_report', [], context)
+        elif event_key == 'menu_query_vacation':
+            response_text = command_handler.handle_command('query_vacation', [], context)
+        elif event_key == 'menu_set_vacation_form':
+            send_interactive_card(user_id, build_set_vacation_form_card(), receive_id_type="user_id")
+            return
+        elif event_key == 'menu_cancel_vacation_form':
+            send_interactive_card(user_id, build_cancel_vacation_form_card(), receive_id_type="user_id")
+            return
+        else:
+            logger.warning(f"未识别的机器人菜单 event_key: {event_key}")
+            return
+
+        if response_text:
+            send_text_message(user_id, response_text, receive_id_type="user_id")
+
+    except Exception as e:
+        logger.error(f"处理机器人菜单事件失败: {e}", exc_info=True)
 
 
 def extract_text_from_post(content_json: dict) -> str:
@@ -1397,12 +1447,14 @@ if __name__ == '__main__':
         config.VERIFICATION_TOKEN,
         lark.LogLevel.ERROR  # 修改为ERROR级别，减少SDK的日志干扰
     ).register_p2_im_message_receive_v1(handle_message) \
+     .register_p2_application_bot_menu_v6(handle_bot_menu_event) \
      .register_p2_card_action_trigger(handle_card_action) \
      .register_p2_im_message_recalled_v1(handle_message_recalled) \
      .build()
 
     logger.info("✅ 已注册事件处理器：")
     logger.info("   - im.message.receive_v1 (消息接收)")
+    logger.info("   - application.bot.menu.v6 (机器人菜单点击)")
     logger.info("   - card.action.trigger (卡片按钮点击)")
     logger.info("   - im.message.recalled_v1 (消息撤回)")
 
