@@ -88,6 +88,18 @@ class Config:
         # 休假管理配置
         self.VACATION_STORAGE_FILE = os.getenv('VACATION_STORAGE_FILE', 'data/vacations.json')
 
+        # 工作日日历配置
+        self.HOLIDAY_API_URL = os.getenv('HOLIDAY_API_URL', 'http://timor.tech/api/holiday/year/{year}')
+        self.HOLIDAY_CACHE_FILE = os.getenv('HOLIDAY_CACHE_FILE', 'data/holidays_cache.json')
+        self.HOLIDAY_CONFIG_FILE = os.getenv('HOLIDAY_CONFIG_FILE', 'config/holidays.json')
+
+        # 命令功能配置
+        self.COMMAND_ENABLED = os.getenv('COMMAND_ENABLED', 'True').lower() == 'true'
+        admin_users = os.getenv('COMMAND_ADMIN_USERS', '')
+        self.COMMAND_ADMIN_USERS = [
+            user_id.strip() for user_id in admin_users.split(',') if user_id.strip()
+        ]
+
     def _load_keywords(self):
         """
         加载关键字配置
