@@ -11,6 +11,7 @@ import os
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 from typing import List, Set
+from utils.workday_calendar import WorkdayCalendar
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +246,50 @@ class ReminderSender:
         except Exception as e:
             logger.error(f"检查并提醒失败: {str(e)}", exc_info=True)
             return False
+
+    def check_and_send_reminders(self, chat_id: str, check_date: str = None,
+                                 reports: List[dict] = None,
+                                 user_names_file: str = 'config/user_names.json') -> List[str]:
+        """
+        检查并发送日报提醒（支持工作日判断）
+
+        Args:
+            chat_id: 群组ID
+            check_date: 检查日期 (YYYY-MM-DD)，默认今天
+            reports: 已收集的日报列表（可选）
+            user_names_file: 用户姓名映射文件路径
+
+        Returns:
+            List[str]: 被提醒的用户ID列表，非工作日返回空列表
+        """
+        # 1. 工作日判断
+        calendar = WorkdayCalendar()
+        if not calendar.is_workday(check_date):
+            logger.info(f"日期 {check_date or '今天'} 不是工作日，跳过日报提醒")
+            return []
+
+        # 2. 兼容已有调用：未传 reports 时按今天读取
+        if reports is None:
+            from utils.daily_report_storage import DailyReportStorage
+            storage = DailyReportStorage()
+            target_date = check_date
+            reports = storage.get_all_reports(target_date)
+
+        # 3. 计算缺失用户并发送提醒
+        all_users = self.get_all_users(user_names_file)
+        if not all_users:
+            logger.warning("未找到需要提交日报的用户列表")
+            return []
+
+        submitted_users = self.get_submitted_users(reports)
+        missing_users = self.find_missing_users(all_users, submitted_users)
+
+        if not missing_users:
+            logger.info("所有人都已提交日报，无需发送提醒")
+            return []
+
+        self.send_reminder(chat_id, missing_users)
+        return [user_id for user_id, _ in missing_users]
 
 
 # 测试代码
