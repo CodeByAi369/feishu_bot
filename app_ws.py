@@ -17,6 +17,7 @@ from threading import Thread, Event, Timer
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 from lark_oapi.ws import Client as WSClient
+from lark_oapi.event.callback.model.p2_card_action_trigger import P2CardActionTrigger
 from apscheduler.schedulers.background import BackgroundScheduler
 from config.config import Config
 from utils.keyword_matcher import KeywordMatcher
@@ -276,7 +277,7 @@ def save_user_to_config(user_id: str, name: str):
         logger.warning(f"保存用户映射到配置文件失败: {str(e)}")
 
 
-def send_text_message(chat_id: str, text: str):
+def send_text_message(chat_id: str, text: str, receive_id_type: str = "chat_id"):
     """发送文本消息到群聊"""
     client = lark.Client.builder() \
         .app_id(config.APP_ID) \
@@ -284,7 +285,7 @@ def send_text_message(chat_id: str, text: str):
         .build()
 
     request = CreateMessageRequest.builder() \
-        .receive_id_type("chat_id") \
+        .receive_id_type(receive_id_type) \
         .request_body(CreateMessageRequestBody.builder()
             .receive_id(chat_id)
             .msg_type("text")
@@ -295,6 +296,129 @@ def send_text_message(chat_id: str, text: str):
     response = client.im.v1.message.create(request)
     if not response.success():
         raise RuntimeError(f"发送文本消息失败: {response.msg}")
+
+
+def send_interactive_card(chat_id: str, card: dict, receive_id_type: str = "chat_id"):
+    """发送交互式卡片消息"""
+    client = lark.Client.builder() \
+        .app_id(config.APP_ID) \
+        .app_secret(config.APP_SECRET) \
+        .build()
+
+    request = CreateMessageRequest.builder() \
+        .receive_id_type(receive_id_type) \
+        .request_body(CreateMessageRequestBody.builder()
+            .receive_id(chat_id)
+            .msg_type("interactive")
+            .content(json.dumps({"card": card}, ensure_ascii=False))
+            .build()) \
+        .build()
+
+    response = client.im.v1.message.create(request)
+    if not response.success():
+        raise RuntimeError(f"发送卡片消息失败: {response.msg}")
+
+
+def build_command_menu_card() -> dict:
+    """构建命令菜单卡片（类似TG键盘的点选体验）"""
+    return {
+        "config": {
+            "wide_screen_mode": True
+        },
+        "header": {
+            "template": "blue",
+            "title": {
+                "tag": "plain_text",
+                "content": "🤖 飞书机器人快捷指令菜单"
+            }
+        },
+        "elements": [
+            {
+                "tag": "markdown",
+                "content": "点击下面按钮直接执行命令（常用操作一键触发）"
+            },
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "📊 今日日报汇总"},
+                        "type": "primary",
+                        "value": {"cmd": "summary_today"}
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "📝 我的日报"},
+                        "type": "default",
+                        "value": {"cmd": "my_report_today"}
+                    }
+                ]
+            },
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "🏖️ 查询今日调休"},
+                        "type": "default",
+                        "value": {"cmd": "query_vacation_today"}
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "📚 命令说明"},
+                        "type": "default",
+                        "value": {"cmd": "help_text"}
+                    }
+                ]
+            },
+            {
+                "tag": "note",
+                "elements": [
+                    {
+                        "tag": "plain_text",
+                        "content": "设置/取消调休请继续使用：/设置调休 姓名 [日期]、/取消调休 姓名 [日期]"
+                    }
+                ]
+            }
+        ]
+    }
+
+
+def handle_card_action(data: P2CardActionTrigger):
+    """处理卡片按钮点击回调"""
+    try:
+        action_value = (data.event.action.value if data and data.event and data.event.action else {}) or {}
+        cmd = action_value.get('cmd')
+        open_chat_id = data.event.context.open_chat_id if data and data.event and data.event.context else None
+        operator_user_id = data.event.operator.user_id if data and data.event and data.event.operator else None
+
+        logger.info(f"🎛️ 收到卡片点击回调: cmd={cmd}, user_id={operator_user_id}")
+
+        if not open_chat_id or not cmd:
+            logger.warning("卡片回调缺少 open_chat_id 或 cmd")
+            return
+
+        user_name = user_names_map.get(operator_user_id, '未知用户') if operator_user_id else '未知用户'
+        context = {
+            'user_id': operator_user_id,
+            'user_name': user_name,
+            'chat_id': open_chat_id,
+        }
+
+        response_text = None
+        if cmd == 'summary_today':
+            response_text = command_handler.handle_command('summary', [], context)
+        elif cmd == 'my_report_today':
+            response_text = command_handler.handle_command('my_report', [], context)
+        elif cmd == 'query_vacation_today':
+            response_text = command_handler.handle_command('query_vacation', [], context)
+        elif cmd == 'help_text':
+            response_text = command_handler.handle_command('help', [], context)
+
+        if response_text:
+            send_text_message(open_chat_id, response_text, receive_id_type="open_chat_id")
+    except Exception as e:
+        logger.error(f"处理卡片回调失败: {e}", exc_info=True)
 
 
 def extract_text_from_post(content_json: dict) -> str:
@@ -477,6 +601,17 @@ def handle_message(data: P2ImMessageReceiveV1):
             cmd_info = command_router.parse_command(text)
             if not cmd_info:
                 logger.warning(f"命令解析失败: {text}")
+                return
+
+            # /帮助 使用交互式卡片菜单（类似TG键盘点选）
+            if cmd_info['command'] == 'help':
+                try:
+                    send_interactive_card(chat_id, build_command_menu_card())
+                except Exception as send_err:
+                    logger.error(f"发送命令菜单卡片失败: {send_err}", exc_info=True)
+                    # 兜底：发送纯文本帮助
+                    fallback_text = command_handler.handle_command('help', [], {})
+                    send_text_message(chat_id, fallback_text)
                 return
 
             # 获取发送者信息用于命令上下文
@@ -1136,11 +1271,13 @@ if __name__ == '__main__':
         config.VERIFICATION_TOKEN,
         lark.LogLevel.ERROR  # 修改为ERROR级别，减少SDK的日志干扰
     ).register_p2_im_message_receive_v1(handle_message) \
+     .register_p2_card_action_trigger(handle_card_action) \
      .register_p2_im_message_recalled_v1(handle_message_recalled) \
      .build()
 
     logger.info("✅ 已注册事件处理器：")
     logger.info("   - im.message.receive_v1 (消息接收)")
+    logger.info("   - card.action.trigger (卡片按钮点击)")
     logger.info("   - im.message.recalled_v1 (消息撤回)")
 
     # 群组过滤提醒
